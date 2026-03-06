@@ -33,9 +33,18 @@ The `skills/` directory contains structured development methodologies that enfor
 | `/write-plan` | Create a detailed implementation plan |
 | `/execute-plan` | Execute plan in batches with review checkpoints |
 
+## Infrastructure
+
+- **`.claude-plugin/plugin.json`** - Claude Code plugin manifest (v4.3.1)
+- **`hooks/`** - SessionStart hook injects `using-superpowers` skill at session boot
+- **`lib/skills-core.js`** - Shared utilities for skill discovery and frontmatter parsing
+- **`agents/code-reviewer.md`** - Senior code reviewer agent definition
+- **`commands/`** - Slash commands (`/brainstorm`, `/write-plan`, `/execute-plan`)
+
 ## Conventions
 
 - Plans are saved to `docs/plans/YYYY-MM-DD-<feature-name>.md`
 - Skills are in `skills/<skill-name>/SKILL.md`
+- Supporting files live alongside SKILL.md in the same directory
 - Follow TDD: write failing test first, then implement, then refactor
 - Verify all claims with fresh evidence before completion
