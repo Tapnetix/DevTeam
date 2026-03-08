@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@devteam/shared": "*"
+    "@devteam/shared": "*",
+    "@slack/bolt": "^4.1.0"
   }
 }
