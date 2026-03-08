@@ -57,9 +57,9 @@ export const CICDConfigSchema = z.object({
 export type CICDConfig = z.infer<typeof CICDConfigSchema>;
 
 export const IntegrationsSchema = z.object({
-  jira: JiraConfigSchema,
-  github: GitHubConfigSchema,
-  cicd: CICDConfigSchema,
+  jira: JiraConfigSchema.optional(),
+  github: GitHubConfigSchema.optional(),
+  cicd: CICDConfigSchema.optional(),
 });
 export type Integrations = z.infer<typeof IntegrationsSchema>;
 
@@ -78,7 +78,7 @@ export const GuardrailActionSchema = z.object({
 export type GuardrailAction = z.infer<typeof GuardrailActionSchema>;
 
 export const GuardrailsSchema = z.object({
-  autoMerge: AutoMergeSchema,
+  autoMerge: AutoMergeSchema.optional(),
   humanApproval: z.array(GuardrailActionSchema).default([]),
   blocked: z.array(GuardrailActionSchema).default([]),
 });
@@ -108,9 +108,9 @@ export const TeamConfigSchema = z
     team: TeamInfoSchema,
     members: z.array(TeamMemberSchema).min(1),
     slack: SlackConfigSchema,
-    integrations: IntegrationsSchema,
-    guardrails: GuardrailsSchema,
-    knowledge: KnowledgeConfigSchema,
+    integrations: IntegrationsSchema.default({}),
+    guardrails: GuardrailsSchema.default({}),
+    knowledge: KnowledgeConfigSchema.default({}),
   })
   .refine(
     (config) => config.members.some((m) => m.role === 'team_lead'),
