@@ -12,4 +12,8 @@ export {
   type WorkItem,
   type OrchestratorConfig,
 } from './orchestrator.js';
-export { ContextBuilder, type TaskContext } from './context-builder.js';
+export {
+  ContextBuilder,
+  type TaskContext,
+  type ContextBuilderOptions,
+} from './context-builder.js';
