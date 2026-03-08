@@ -5,6 +5,7 @@
     { "path": "packages/orchestrator" },
     { "path": "packages/slack-bot" },
     { "path": "packages/integrations" },
-    { "path": "packages/worker" }
+    { "path": "packages/worker" },
+    { "path": "packages/cli" }
   ]
 }
