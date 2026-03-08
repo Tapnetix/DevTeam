@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: devteam
+      POSTGRES_PASSWORD: devteam
+      POSTGRES_DB: devteam
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devteam -d devteam"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: packages/orchestrator/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://devteam:devteam@postgres:5432/devteam
+
+  slack-bot:
+    build:
+      context: .
+      dockerfile: packages/slack-bot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://devteam:devteam@postgres:5432/devteam
+
+  integrations:
+    build:
+      context: .
+      dockerfile: packages/integrations/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://devteam:devteam@postgres:5432/devteam
+
+volumes:
+  pgdata:
+    driver: local
