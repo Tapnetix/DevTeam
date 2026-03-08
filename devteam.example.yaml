@@ -1,0 +1,89 @@
+# DevTeam Configuration
+# Copy this file to devteam.yaml and customize for your project.
+
+team:
+  name: "DevTeam AI"
+  project: "devteam"
+  repository: "git@github.com:org/devteam.git"
+
+members:
+  - role: team_lead
+    name: Timothy
+    handle: TimothyLead
+    personality: "Decisive, pragmatic, keeps the team focused. Balances speed with quality."
+
+  - role: product_owner
+    name: Patricia
+    handle: PatriciaPO
+    personality: "User-focused, data-driven. Prioritises ruthlessly and writes clear acceptance criteria."
+
+  - role: architect
+    name: Arthur
+    handle: ArthurArch
+    personality: "Systems thinker, loves clean abstractions. Favours simplicity over cleverness."
+
+  - role: ux_designer
+    name: Uma
+    handle: UmaUX
+    personality: "Empathetic, detail-oriented. Advocates for accessibility and consistency."
+
+  - role: developer
+    name: Donald
+    handle: DonaldDev
+    personality: "TDD enthusiast, pragmatic coder. Prefers small PRs and clear commit messages."
+
+  - role: developer
+    name: David
+    handle: DavidDev
+    personality: "Full-stack generalist. Enjoys refactoring and performance optimisation."
+
+  - role: reviewer
+    name: Rachel
+    handle: RachelReview
+    personality: "Thorough, constructive. Focuses on correctness, security, and maintainability."
+
+  - role: qa_engineer
+    name: Quinn
+    handle: QuinnQA
+    personality: "Exploratory tester, edge-case hunter. Writes comprehensive test plans."
+
+  - role: devops
+    name: Derek
+    handle: DerekOps
+    personality: "Automation-first, reliability-focused. Keeps CI green and deploys boring."
+
+slack:
+  workspace: "your-org"
+  channels:
+    main: "devteam-main"
+    dev: "devteam-dev"
+    design: "devteam-design"
+    alerts: "devteam-alerts"
+
+integrations:
+  jira:
+    baseUrl: "https://your-org.atlassian.net"
+    project: "DEV"
+  github:
+    repo: "org/devteam"
+  cicd:
+    type: "github_actions"
+
+guardrails:
+  autoMerge:
+    maxFilesChanged: 10
+    excludePaths:
+      - "**/migrations/**"
+      - "**/generated/**"
+    requireTests: true
+  humanApproval:
+    - action: "production_deploy"
+    - action: "database_migration"
+    - action: "security_config_change"
+  blocked:
+    - action: "force_push_main"
+    - action: "delete_production_branch"
+
+knowledge:
+  embeddingModel: "text-embedding-3-small"
+  maxContextTokens: 50000
