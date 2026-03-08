@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/shared" },
+    { "path": "packages/orchestrator" },
+    { "path": "packages/slack-bot" },
+    { "path": "packages/integrations" },
+    { "path": "packages/worker" }
+  ]
+}
