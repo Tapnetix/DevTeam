@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devteam-config
+  namespace: devteam
+  labels:
+    app.kubernetes.io/part-of: devteam
+data:
+  NODE_ENV: production
+  # Database
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: devteam
+  # Service ports
+  ORCHESTRATOR_PORT: "3000"
+  SLACK_BOT_PORT: "3001"
+  INTEGRATIONS_PORT: "3002"
+  # Jira
+  JIRA_BASE_URL: "https://your-org.atlassian.net"

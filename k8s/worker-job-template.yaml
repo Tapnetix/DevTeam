@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Name should be dynamically generated per task, e.g. worker-task-<id>
+  name: worker-task-template
+  namespace: devteam
+  labels:
+    app.kubernetes.io/name: worker
+    app.kubernetes.io/part-of: devteam
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: worker
+        app.kubernetes.io/part-of: devteam
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: worker
+          image: devteam/worker:latest
+          envFrom:
+            - configMapRef:
+                name: devteam-config
+            - secretRef:
+                name: devteam-secrets
+          env:
+            # TASK_ID should be set dynamically when spawning the job
+            - name: TASK_ID
+              value: "PLACEHOLDER"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi

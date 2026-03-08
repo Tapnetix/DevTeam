@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devteam-ingress
+  namespace: devteam
+  labels:
+    app.kubernetes.io/part-of: devteam
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: devteam.example.com
+      http:
+        paths:
+          # GitHub & Jira webhook endpoints handled by integrations service
+          - path: /webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: integrations
+                port:
+                  number: 3002
+          # Slack events endpoint
+          - path: /slack
+            pathType: Prefix
+            backend:
+              service:
+                name: slack-bot
+                port:
+                  number: 3001
+          # Orchestrator API
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: orchestrator
+                port:
+                  number: 3000
