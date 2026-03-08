@@ -1,4 +1,3 @@
-import { Octokit } from '@octokit/rest';
 import type {
   CICDAdapter,
   BuildResult,
@@ -13,6 +12,24 @@ export interface GitHubActionsConfig {
   repo: string;
   token: string;
   defaultWorkflow: string;
+}
+
+/**
+ * Minimal interface for the Octokit actions client methods we use.
+ * Allows dependency injection for testing and avoids ESM import issues.
+ */
+export interface ActionsOctokitClient {
+  rest: {
+    actions: {
+      createWorkflowDispatch(params: Record<string, unknown>): Promise<{ status: number }>;
+      listWorkflowRuns(params: Record<string, unknown>): Promise<{
+        data: { workflow_runs: WorkflowRunData[] };
+      }>;
+      listWorkflowRunArtifacts(params: Record<string, unknown>): Promise<{
+        data: { artifacts: WorkflowArtifact[] };
+      }>;
+    };
+  };
 }
 
 /**
@@ -43,24 +60,66 @@ function mapStatus(status: string, conclusion: string | null): BuildResult['stat
 }
 
 /**
+ * Creates an Octokit client via dynamic import to avoid ESM issues.
+ */
+async function createActionsOctokitClient(token: string): Promise<ActionsOctokitClient> {
+  const { Octokit } = await import('@octokit/rest');
+  return new Octokit({ auth: token }) as unknown as ActionsOctokitClient;
+}
+
+/**
  * GitHub Actions CI/CD adapter implementing CICDAdapter.
  *
  * Uses Octokit to trigger workflows, retrieve artifacts, and handle
  * build completion / test result webhook events.
  */
 export class GitHubActionsAdapter implements CICDAdapter {
-  private readonly octokit: Octokit;
+  private octokit: ActionsOctokitClient;
   private readonly owner: string;
   private readonly repo: string;
   private readonly defaultWorkflow: string;
   private readonly buildHandlers = new Set<BuildEventHandler>();
   private readonly testResultsHandlers = new Set<TestResultsHandler>();
 
-  constructor(config: GitHubActionsConfig) {
+  constructor(config: GitHubActionsConfig, octokit?: ActionsOctokitClient) {
     this.owner = config.owner;
     this.repo = config.repo;
     this.defaultWorkflow = config.defaultWorkflow;
-    this.octokit = new Octokit({ auth: config.token });
+    this.octokit = octokit ?? this.createLazyClient(config.token);
+  }
+
+  /**
+   * Create a Proxy-based lazy client that initialises Octokit on first use.
+   */
+  private createLazyClient(token: string): ActionsOctokitClient {
+    let realClient: ActionsOctokitClient | null = null;
+    const self = this;
+
+    const handler: ProxyHandler<ActionsOctokitClient> = {
+      get(_target, prop) {
+        if (prop === 'rest') {
+          return new Proxy({} as ActionsOctokitClient['rest'], {
+            get(_restTarget, restProp) {
+              return new Proxy({} as Record<string, unknown>, {
+                get(_nsProp, method) {
+                  return async (...args: unknown[]) => {
+                    if (!realClient) {
+                      realClient = await createActionsOctokitClient(token);
+                      self.octokit = realClient;
+                    }
+                    const ns = (realClient.rest as Record<string, Record<string, Function>>)[restProp as string];
+                    return ns[method as string](...args);
+                  };
+                },
+              });
+            },
+          });
+        }
+        return undefined;
+      },
+    };
+
+    return new Proxy({} as ActionsOctokitClient, handler);
   }
 
   // ── CICDAdapter ────────────────────────────────────────────────────
@@ -75,7 +134,7 @@ export class GitHubActionsAdapter implements CICDAdapter {
       ref: params.branch,
     });
 
-    // Small delay to allow the run to be created, then fetch the latest run
+    // Fetch the latest run to return as the build result
     const { data } = await this.octokit.rest.actions.listWorkflowRuns({
       owner: this.owner,
       repo: this.repo,

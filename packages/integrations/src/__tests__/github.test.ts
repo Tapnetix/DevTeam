@@ -1,24 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitHubAdapter } from '../adapters/github.js';
-import type { GitHubConfig } from '../adapters/github.js';
+import type { GitHubConfig, OctokitClient } from '../adapters/github.js';
 import type { CreatePRInput, PullRequest, PREvent } from '../adapters/types.js';
 
-// ── Mock Octokit ────────────────────────────────────────────────────────
+// ── Mock Octokit client ─────────────────────────────────────────────────
 
-const mockOctokit = {
-  rest: {
-    pulls: {
-      create: vi.fn(),
-      get: vi.fn(),
-      createReview: vi.fn(),
-      merge: vi.fn(),
-    },
-  },
-};
-
-vi.mock('@octokit/rest', () => ({
-  Octokit: vi.fn(() => mockOctokit),
-}));
+function createMockOctokit(): OctokitClient & {
+  _pulls: {
+    create: ReturnType<typeof vi.fn>;
+    createReview: ReturnType<typeof vi.fn>;
+    merge: ReturnType<typeof vi.fn>;
+  };
+} {
+  const pulls = {
+    create: vi.fn(),
+    createReview: vi.fn(),
+    merge: vi.fn(),
+  };
+  return {
+    rest: { pulls },
+    _pulls: pulls,
+  };
+}
 
 function makeConfig(overrides?: Partial<GitHubConfig>): GitHubConfig {
   return {
@@ -50,15 +53,17 @@ function githubPRPayload(overrides?: Record<string, unknown>) {
 
 describe('GitHubAdapter', () => {
   let adapter: GitHubAdapter;
+  let mockOctokit: ReturnType<typeof createMockOctokit>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GitHubAdapter(makeConfig());
+    mockOctokit = createMockOctokit();
+    adapter = new GitHubAdapter(makeConfig(), mockOctokit);
   });
 
   describe('createPR', () => {
     it('creates a pull request and returns mapped PullRequest', async () => {
-      mockOctokit.rest.pulls.create.mockResolvedValueOnce(githubPRPayload());
+      mockOctokit._pulls.create.mockResolvedValueOnce(githubPRPayload());
 
       const input: CreatePRInput = {
         title: 'feat: add login page',
@@ -70,7 +75,7 @@ describe('GitHubAdapter', () => {
 
       const pr = await adapter.createPR(input);
 
-      expect(mockOctokit.rest.pulls.create).toHaveBeenCalledWith({
+      expect(mockOctokit._pulls.create).toHaveBeenCalledWith({
         owner: 'test-org',
         repo: 'test-repo',
         title: 'feat: add login page',
@@ -96,7 +101,7 @@ describe('GitHubAdapter', () => {
     });
 
     it('creates a draft PR when draft is true', async () => {
-      mockOctokit.rest.pulls.create.mockResolvedValueOnce(githubPRPayload());
+      mockOctokit._pulls.create.mockResolvedValueOnce(githubPRPayload());
 
       await adapter.createPR({
         title: 'WIP: login',
@@ -106,7 +111,7 @@ describe('GitHubAdapter', () => {
         draft: true,
       });
 
-      expect(mockOctokit.rest.pulls.create).toHaveBeenCalledWith(
+      expect(mockOctokit._pulls.create).toHaveBeenCalledWith(
         expect.objectContaining({ draft: true }),
       );
     });
@@ -114,7 +119,7 @@ describe('GitHubAdapter', () => {
 
   describe('reviewPR', () => {
     it('submits a review with APPROVED event', async () => {
-      mockOctokit.rest.pulls.createReview.mockResolvedValueOnce({
+      mockOctokit._pulls.createReview.mockResolvedValueOnce({
         data: {
           id: 200,
           state: 'APPROVED',
@@ -128,7 +133,7 @@ describe('GitHubAdapter', () => {
         body: 'LGTM!',
       });
 
-      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
+      expect(mockOctokit._pulls.createReview).toHaveBeenCalledWith({
         owner: 'test-org',
         repo: 'test-repo',
         pull_number: 42,
@@ -145,7 +150,7 @@ describe('GitHubAdapter', () => {
     });
 
     it('submits a review with REQUEST_CHANGES event', async () => {
-      mockOctokit.rest.pulls.createReview.mockResolvedValueOnce({
+      mockOctokit._pulls.createReview.mockResolvedValueOnce({
         data: {
           id: 201,
           state: 'CHANGES_REQUESTED',
@@ -159,7 +164,7 @@ describe('GitHubAdapter', () => {
         body: 'Need fixes',
       });
 
-      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith(
+      expect(mockOctokit._pulls.createReview).toHaveBeenCalledWith(
         expect.objectContaining({ event: 'REQUEST_CHANGES' }),
       );
 
@@ -167,7 +172,7 @@ describe('GitHubAdapter', () => {
     });
 
     it('submits a comment-only review', async () => {
-      mockOctokit.rest.pulls.createReview.mockResolvedValueOnce({
+      mockOctokit._pulls.createReview.mockResolvedValueOnce({
         data: {
           id: 202,
           state: 'COMMENTED',
@@ -181,7 +186,7 @@ describe('GitHubAdapter', () => {
         body: 'Looks interesting',
       });
 
-      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith(
+      expect(mockOctokit._pulls.createReview).toHaveBeenCalledWith(
         expect.objectContaining({ event: 'COMMENT' }),
       );
 
@@ -191,13 +196,13 @@ describe('GitHubAdapter', () => {
 
   describe('mergePR', () => {
     it('merges a PR with squash method by default', async () => {
-      mockOctokit.rest.pulls.merge.mockResolvedValueOnce({
+      mockOctokit._pulls.merge.mockResolvedValueOnce({
         data: { merged: true },
       });
 
       await adapter.mergePR(42);
 
-      expect(mockOctokit.rest.pulls.merge).toHaveBeenCalledWith({
+      expect(mockOctokit._pulls.merge).toHaveBeenCalledWith({
         owner: 'test-org',
         repo: 'test-repo',
         pull_number: 42,
@@ -206,19 +211,19 @@ describe('GitHubAdapter', () => {
     });
 
     it('merges with specified method', async () => {
-      mockOctokit.rest.pulls.merge.mockResolvedValueOnce({
+      mockOctokit._pulls.merge.mockResolvedValueOnce({
         data: { merged: true },
       });
 
       await adapter.mergePR(42, 'rebase');
 
-      expect(mockOctokit.rest.pulls.merge).toHaveBeenCalledWith(
+      expect(mockOctokit._pulls.merge).toHaveBeenCalledWith(
         expect.objectContaining({ merge_method: 'rebase' }),
       );
     });
 
     it('throws if merge fails', async () => {
-      mockOctokit.rest.pulls.merge.mockRejectedValueOnce(
+      mockOctokit._pulls.merge.mockRejectedValueOnce(
         new Error('Pull request is not mergeable'),
       );
 

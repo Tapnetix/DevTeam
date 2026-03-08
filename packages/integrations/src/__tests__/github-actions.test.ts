@@ -1,23 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GitHubActionsAdapter } from '../adapters/github-actions.js';
-import type { GitHubActionsConfig } from '../adapters/github-actions.js';
+import type { GitHubActionsConfig, ActionsOctokitClient } from '../adapters/github-actions.js';
 import type { BuildResult, TestResults, BuildArtifact } from '../adapters/types.js';
 
-// ── Mock Octokit ────────────────────────────────────────────────────────
+// ── Mock Octokit client ─────────────────────────────────────────────────
 
-const mockOctokit = {
-  rest: {
-    actions: {
-      createWorkflowDispatch: vi.fn(),
-      listWorkflowRuns: vi.fn(),
-      listWorkflowRunArtifacts: vi.fn(),
-    },
-  },
-};
-
-vi.mock('@octokit/rest', () => ({
-  Octokit: vi.fn(() => mockOctokit),
-}));
+function createMockOctokit(): ActionsOctokitClient & {
+  _actions: {
+    createWorkflowDispatch: ReturnType<typeof vi.fn>;
+    listWorkflowRuns: ReturnType<typeof vi.fn>;
+    listWorkflowRunArtifacts: ReturnType<typeof vi.fn>;
+  };
+} {
+  const actions = {
+    createWorkflowDispatch: vi.fn(),
+    listWorkflowRuns: vi.fn(),
+    listWorkflowRunArtifacts: vi.fn(),
+  };
+  return {
+    rest: { actions },
+    _actions: actions,
+  };
+}
 
 function makeConfig(overrides?: Partial<GitHubActionsConfig>): GitHubActionsConfig {
   return {
@@ -31,20 +35,22 @@ function makeConfig(overrides?: Partial<GitHubActionsConfig>): GitHubActionsConf
 
 describe('GitHubActionsAdapter', () => {
   let adapter: GitHubActionsAdapter;
+  let mockOctokit: ReturnType<typeof createMockOctokit>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GitHubActionsAdapter(makeConfig());
+    mockOctokit = createMockOctokit();
+    adapter = new GitHubActionsAdapter(makeConfig(), mockOctokit);
   });
 
   describe('triggerBuild', () => {
     it('dispatches a workflow and returns initial build result', async () => {
-      mockOctokit.rest.actions.createWorkflowDispatch.mockResolvedValueOnce({
+      mockOctokit._actions.createWorkflowDispatch.mockResolvedValueOnce({
         status: 204,
       });
 
       // After dispatch, list runs to find the triggered one
-      mockOctokit.rest.actions.listWorkflowRuns.mockResolvedValueOnce({
+      mockOctokit._actions.listWorkflowRuns.mockResolvedValueOnce({
         data: {
           workflow_runs: [
             {
@@ -63,7 +69,7 @@ describe('GitHubActionsAdapter', () => {
 
       const result = await adapter.triggerBuild({ branch: 'feature/login' });
 
-      expect(mockOctokit.rest.actions.createWorkflowDispatch).toHaveBeenCalledWith({
+      expect(mockOctokit._actions.createWorkflowDispatch).toHaveBeenCalledWith({
         owner: 'test-org',
         repo: 'test-repo',
         workflow_id: 'ci.yml',
@@ -81,11 +87,11 @@ describe('GitHubActionsAdapter', () => {
     });
 
     it('uses specified workflow instead of default', async () => {
-      mockOctokit.rest.actions.createWorkflowDispatch.mockResolvedValueOnce({
+      mockOctokit._actions.createWorkflowDispatch.mockResolvedValueOnce({
         status: 204,
       });
 
-      mockOctokit.rest.actions.listWorkflowRuns.mockResolvedValueOnce({
+      mockOctokit._actions.listWorkflowRuns.mockResolvedValueOnce({
         data: {
           workflow_runs: [
             {
@@ -104,7 +110,7 @@ describe('GitHubActionsAdapter', () => {
 
       await adapter.triggerBuild({ branch: 'main', workflow: 'deploy.yml' });
 
-      expect(mockOctokit.rest.actions.createWorkflowDispatch).toHaveBeenCalledWith(
+      expect(mockOctokit._actions.createWorkflowDispatch).toHaveBeenCalledWith(
         expect.objectContaining({ workflow_id: 'deploy.yml' }),
       );
     });
@@ -112,7 +118,7 @@ describe('GitHubActionsAdapter', () => {
 
   describe('getArtifacts', () => {
     it('returns artifacts for a given build/run', async () => {
-      mockOctokit.rest.actions.listWorkflowRunArtifacts.mockResolvedValueOnce({
+      mockOctokit._actions.listWorkflowRunArtifacts.mockResolvedValueOnce({
         data: {
           artifacts: [
             {
@@ -135,7 +141,7 @@ describe('GitHubActionsAdapter', () => {
 
       const artifacts = await adapter.getArtifacts('5001');
 
-      expect(mockOctokit.rest.actions.listWorkflowRunArtifacts).toHaveBeenCalledWith({
+      expect(mockOctokit._actions.listWorkflowRunArtifacts).toHaveBeenCalledWith({
         owner: 'test-org',
         repo: 'test-repo',
         run_id: 5001,

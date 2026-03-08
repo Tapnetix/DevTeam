@@ -1,4 +1,3 @@
-import { Octokit } from '@octokit/rest';
 import type {
   SourceControlAdapter,
   PullRequest,
@@ -12,6 +11,20 @@ export interface GitHubConfig {
   owner: string;
   repo: string;
   token: string;
+}
+
+/**
+ * Minimal interface for the Octokit client methods we use.
+ * Allows dependency injection for testing and avoids ESM import issues.
+ */
+export interface OctokitClient {
+  rest: {
+    pulls: {
+      create(params: Record<string, unknown>): Promise<{ data: Record<string, unknown> }>;
+      createReview(params: Record<string, unknown>): Promise<{ data: Record<string, unknown> }>;
+      merge(params: Record<string, unknown>): Promise<{ data: Record<string, unknown> }>;
+    };
+  };
 }
 
 /**
@@ -33,21 +46,65 @@ const GITHUB_STATE_TO_REVIEW: Record<string, PRReview['state']> = {
 };
 
 /**
+ * Creates an Octokit client via dynamic import to avoid ESM issues.
+ */
+async function createOctokitClient(token: string): Promise<OctokitClient> {
+  const { Octokit } = await import('@octokit/rest');
+  return new Octokit({ auth: token }) as unknown as OctokitClient;
+}
+
+/**
  * GitHub adapter implementing SourceControlAdapter.
  *
  * Uses Octokit for GitHub REST API interactions. Provides PR management
  * and webhook event handling for pull request lifecycle events.
  */
 export class GitHubAdapter implements SourceControlAdapter {
-  private readonly octokit: Octokit;
+  private octokit: OctokitClient;
   private readonly owner: string;
   private readonly repo: string;
   private readonly prEventHandlers = new Set<PREventHandler>();
 
-  constructor(private config: GitHubConfig) {
+  constructor(config: GitHubConfig, octokit?: OctokitClient) {
     this.owner = config.owner;
     this.repo = config.repo;
-    this.octokit = new Octokit({ auth: config.token });
+    // Accept an injected client (for testing) or create a stub that will
+    // be lazily replaced on first API call
+    this.octokit = octokit ?? this.createLazyClient(config.token);
+  }
+
+  /**
+   * Create a Proxy-based lazy client that initialises Octokit on first use.
+   */
+  private createLazyClient(token: string): OctokitClient {
+    let realClient: OctokitClient | null = null;
+    const self = this;
+
+    const handler: ProxyHandler<OctokitClient> = {
+      get(_target, prop) {
+        if (prop === 'rest') {
+          return new Proxy({} as OctokitClient['rest'], {
+            get(_restTarget, restProp) {
+              return new Proxy({} as Record<string, unknown>, {
+                get(_nsProp, method) {
+                  return async (...args: unknown[]) => {
+                    if (!realClient) {
+                      realClient = await createOctokitClient(token);
+                      self.octokit = realClient;
+                    }
+                    const ns = (realClient.rest as Record<string, Record<string, Function>>)[restProp as string];
+                    return ns[method as string](...args);
+                  };
+                },
+              });
+            },
+          });
+        }
+        return undefined;
+      },
+    };
+
+    return new Proxy({} as OctokitClient, handler);
   }
 
   // ── SourceControlAdapter ───────────────────────────────────────────
@@ -63,7 +120,7 @@ export class GitHubAdapter implements SourceControlAdapter {
       draft: input.draft ?? false,
     });
 
-    return this.mapPR(data);
+    return this.mapPR(data as unknown as GitHubPRData);
   }
 
   async reviewPR(
@@ -80,11 +137,12 @@ export class GitHubAdapter implements SourceControlAdapter {
       body: review.body,
     });
 
+    const d = data as { id: number; state: string; body?: string; user?: { login: string } };
     return {
-      id: data.id,
-      state: GITHUB_STATE_TO_REVIEW[data.state] ?? 'commented',
-      body: data.body ?? '',
-      author: data.user?.login ?? 'unknown',
+      id: d.id,
+      state: GITHUB_STATE_TO_REVIEW[d.state] ?? 'commented',
+      body: d.body ?? '',
+      author: d.user?.login ?? 'unknown',
     };
   }
 

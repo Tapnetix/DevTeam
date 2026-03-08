@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@devteam/shared": "*"
+    "@devteam/shared": "*",
+    "@octokit/rest": "^22.0.1"
   }
 }
